@@ -438,11 +438,7 @@ html,body{font-family:'Nunito','Segoe UI',sans-serif;color:var(--ink);background
         <div id="checkoutQRAcct" style="font-size:13px;color:var(--soft);margin:.1rem 0 .3rem"></div>
         <div id="checkoutQRAmount" style="font-size:1.5rem;font-weight:800;color:var(--ink);margin:.2rem 0 .1rem">0đ</div>
         <div id="checkoutQRDesc" style="font-size:11.5px;color:var(--muted);margin-bottom:.5rem"></div>
-        <!-- Waiting indicator -->
-        <div style="display:flex;align-items:center;justify-content:center;gap:.5rem;padding:.45rem .8rem;background:#fff;border-radius:8px;border:1px solid var(--rule);font-size:12.5px;font-weight:700;color:var(--soft)">
-          <div style="width:8px;height:8px;border-radius:50%;background:var(--brand);animation:pulse 1.2s infinite;flex-shrink:0"></div>
-          Chờ khách chuyển khoản...
-        </div>
+
       </div>
     </div>
     <!-- Total + confirm -->
@@ -497,7 +493,7 @@ let promos = [];
 let bankSettings = { bank:'', acct:'', name:'' };
 
 let cart = {};
-let selectedPay = 'Tiền mặt';
+let selectedPay = 'Chuyển khoản';
 let currentCat = 'Tất cả';
 
 // Topping modal state
@@ -867,7 +863,7 @@ function openCheckout() {
   document.getElementById('checkoutTotal').textContent = fmtFull(grand);
 
   // Payment grid
-  const PAYS = ['Tiền mặt','Chuyển khoản'];
+  const PAYS = ['Chuyển khoản'];
   document.getElementById('checkoutPayGrid').innerHTML = PAYS.map(p =>
     `<button class="pay-btn ${p===selectedPay?'sel':''}" onclick="selectPayMethod(this,'${p}')">${p}</button>`
   ).join('');
@@ -1033,7 +1029,7 @@ function resetForNewOrder() {
   document.getElementById('successOverlay').classList.remove('open');
   document.getElementById('custName').value = '';
   document.getElementById('custPhone').value = '';
-  selectedPay = 'Tiền mặt';
+  selectedPay = 'Chuyển khoản';
   // Reset nút đặt hàng (tránh disabled sau đơn trước)
   const btn = document.getElementById('placeBtn');
   btn.disabled = false;
