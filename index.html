@@ -923,6 +923,38 @@ function renderCheckoutQR() {
 }
 
 // ════════════════════════════════════════
+// TELEGRAM — gửi thông báo khi khách đặt
+// ════════════════════════════════════════
+const TG_TOKEN  = '7279617308:AAH_XObS7tWvxBQgKqHugSZOPtUpTDj7ZiY';
+const TG_CHATID = '-5576206301';
+
+async function sendTelegramOrder(order) {
+  if (!TG_TOKEN || !TG_CHATID) return;
+  const items = order.items.map(i =>
+    `  • ${i.emoji} ${i.name} ×${i.qty} — ${(i.price*i.qty).toLocaleString('vi-VN')}đ`
+  ).join('\n');
+  const name = order.custName
+    ? `👤 Khách: <b>${order.custName}</b>${order.custPhone ? ' · '+order.custPhone : ''}`
+    : '';
+  const text = [
+    '🛎️ <b>ĐƠN MỚI TỪ WEB!</b>',
+    name,
+    `📦 Món:\n${items}`,
+    `💰 <b>Tổng: ${order.total.toLocaleString('vi-VN')}đ</b>`,
+    `💳 Thanh toán: ${order.pay}`,
+    `🕐 ${order.time}`,
+    `🔖 Đơn #${String(order.id).slice(-6)}`
+  ].filter(Boolean).join('\n\n');
+  try {
+    await fetch(`https://api.telegram.org/bot${TG_TOKEN}/sendMessage`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ chat_id: TG_CHATID, text, parse_mode: 'HTML' })
+    });
+  } catch(e) { console.warn('sendTelegram:', e); }
+}
+
+// ════════════════════════════════════════
 // PLACE ORDER
 // ════════════════════════════════════════
 async function placeOrder() {
@@ -959,6 +991,7 @@ async function placeOrder() {
     document.getElementById('checkoutOverlay').classList.remove('open');
     document.body.style.overflow = '';
     showSuccess(order);
+    sendTelegramOrder(order); // gửi Telegram ngay, không await để không block UI
     cart = {};
     updateCartFab();
   } catch(e) {
