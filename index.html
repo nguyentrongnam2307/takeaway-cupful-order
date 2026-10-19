@@ -776,6 +776,7 @@ function confirmAdd() {
     cart[key] = {
       id: prod.id, cartKey: key,
       name: prod.name, emoji: prod.emoji || '🍱',
+      image: prod.image || '',
       price: prod.price + topSum + sizeAdd,
       unitPrice: prod.price + topSum + sizeAdd,
       qty: 1, note: noteLabel,
@@ -840,7 +841,9 @@ function renderCartSheet() {
 
   el.innerHTML = items.map(i => `
     <div class="cart-item">
-      <div class="ci-emoji">${i.emoji}</div>
+      <div class="ci-emoji">${i.image
+        ? `<img src="${i.image}" style="width:44px;height:44px;border-radius:8px;object-fit:cover;display:block">`
+        : i.emoji}</div>
       <div class="ci-info">
         <div class="ci-name">${i.name}</div>
         ${i.note ? `<div class="ci-meta">${i.note}</div>` : ''}
@@ -872,11 +875,15 @@ function openCheckout() {
   const disc = calcPromoDiscount(sub);
   const grand = sub - disc;
 
-  let sumHtml = items.map(i =>
-    `<div style="display:flex;justify-content:space-between;padding:.25rem 0;border-bottom:1px solid var(--rule)">
-      <span>${i.emoji} ${i.name} × ${i.qty}${i.note?' <span style="color:var(--muted);font-size:12px">('+i.note+')</span>':''}</span>
+  let sumHtml = items.map(i => {
+    const thumb = i.image
+      ? `<img src="${i.image}" style="width:28px;height:28px;border-radius:6px;object-fit:cover;vertical-align:middle;margin-right:.4rem;flex-shrink:0">`
+      : `<span style="margin-right:.3rem">${i.emoji}</span>`;
+    return `<div style="display:flex;align-items:center;justify-content:space-between;padding:.25rem 0;border-bottom:1px solid var(--rule)">
+      <span style="display:flex;align-items:center;flex:1;min-width:0">${thumb}<span>${i.name} × ${i.qty}${i.note?' <span style="color:var(--muted);font-size:12px">('+i.note+')</span>':''}</span></span>
       <span style="font-weight:700;white-space:nowrap;margin-left:.5rem">${fmtFull(i.price*i.qty)}</span>
-    </div>`).join('');
+    </div>`;
+  }).join('');
   if (disc > 0) sumHtml += `<div style="display:flex;justify-content:space-between;padding:.25rem 0;color:var(--brand)"><span>🎁 Khuyến mãi</span><span>-${fmtFull(disc)}</span></div>`;
   sumHtml += `<div style="display:flex;justify-content:space-between;padding:.3rem 0;font-weight:800;font-size:14.5px;color:var(--ink)"><span>Tổng</span><span style="color:var(--brand)">${fmtFull(grand)}</span></div>`;
   document.getElementById('checkoutSummary').innerHTML = sumHtml;
@@ -993,7 +1000,7 @@ async function placeOrder() {
     source: 'customer', // phân biệt đơn từ web khách
     custName,
     custPhone: document.getElementById('custPhone').value.trim(),
-    items: JSON.parse(JSON.stringify(items)),
+    items: JSON.parse(JSON.stringify(items.map(i => { const x = {...i}; delete x.image; return x; }))),
     sub, discount: disc, total: grand,
     pay: selectedPay,
     date: now.toISOString().slice(0,10),
@@ -1022,9 +1029,14 @@ function showSuccess(order) {
   sub.textContent = `Xin chào ${order.custName}! Đơn đã gửi đến quầy, vui lòng chờ pha chế 😊`;
 
   const sumEl = document.getElementById('successSummary');
-  let rows = order.items.map(i =>
-    `<div class="order-sum-row"><span>${i.emoji} ${i.name} × ${i.qty}${i.note?' ('+i.note+')':''}</span><span>${fmtFull(i.price*i.qty)}</span></div>`
-  ).join('');
+  let rows = order.items.map(i => {
+    const prod = products.find(p => p.id === i.id);
+    const img = prod && prod.image ? prod.image : '';
+    const thumb = img
+      ? `<img src="${img}" style="width:24px;height:24px;border-radius:5px;object-fit:cover;vertical-align:middle;margin-right:.3rem;flex-shrink:0">`
+      : `<span style="margin-right:.3rem">${i.emoji}</span>`;
+    return `<div class="order-sum-row"><span style="display:flex;align-items:center">${thumb}<span>${i.name} × ${i.qty}${i.note?' ('+i.note+')':''}</span></span><span>${fmtFull(i.price*i.qty)}</span></div>`;
+  }).join('');
   if (order.discount > 0) rows += `<div class="order-sum-row" style="color:var(--brand)"><span>🎁 Khuyến mãi</span><span>-${fmtFull(order.discount)}</span></div>`;
   rows += `<div class="order-sum-row"><span>Tổng · ${order.pay}</span><span>${fmtFull(order.total)}</span></div>`;
   sumEl.innerHTML = rows;
