@@ -512,9 +512,13 @@ function setOnline(v) {
 
 async function initData() {
   try {
-    // Load products
-    const pSnap = await db.collection('config').doc('products').get();
-    if (pSnap.exists && pSnap.data().data) products = pSnap.data().data;
+    // Load products — mỗi product lưu 1 doc riêng trong collection 'products'
+    const pSnap = await db.collection('products').get();
+    if (!pSnap.empty) {
+      products = pSnap.docs
+        .map(d => { const d2 = d.data(); delete d2.updatedAt; return d2; })
+        .sort((a, b) => a.id - b.id);
+    }
 
     // Load semiFinished (toppings)
     const sSnap = await db.collection('config').doc('semiFinished').get();
@@ -543,8 +547,16 @@ async function initData() {
 }
 
 function startSync() {
-  db.collection('config').doc('products').onSnapshot(snap => {
-    if (snap.exists && snap.data().data) { products = snap.data().data; renderCatTabs(); renderProducts(); }
+  // Lắng nghe realtime toàn bộ collection 'products' (mỗi product 1 doc riêng)
+  // Bỏ qua lần fire đầu tiên (đã load xong trong initData rồi, tránh render 2 lần)
+  let _firstProductSnap = true;
+  db.collection('products').onSnapshot(snap => {
+    if (_firstProductSnap) { _firstProductSnap = false; return; }
+    products = snap.docs
+      .map(d => { const d2 = d.data(); delete d2.updatedAt; return d2; })
+      .sort((a, b) => a.id - b.id);
+    renderCatTabs();
+    renderProducts();
   });
   db.collection('config').doc('semiFinished').onSnapshot(snap => {
     if (snap.exists && snap.data().data) { semiFinished = snap.data().data; renderCatTabs(); renderProducts(); }
