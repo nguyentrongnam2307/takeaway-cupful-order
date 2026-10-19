@@ -352,6 +352,7 @@ html,body{font-family:'Nunito','Segoe UI',sans-serif;color:var(--ink);background
   <div class="sheet" onclick="event.stopPropagation()">
     <div class="sheet-handle"></div>
     <div class="sheet-header">
+      <div id="topThumb" style="width:44px;height:44px;border-radius:10px;overflow:hidden;flex-shrink:0;display:flex;align-items:center;justify-content:center;background:var(--bg);font-size:28px"></div>
       <div class="sheet-title" id="topTitle">Tuỳ chọn</div>
       <button class="sheet-close" onclick="closeToppingModal()">✕</button>
     </div>
@@ -689,7 +690,14 @@ function openTopping(id) {
   selectedToppings = new Set();
   selectedSize = 'S';
 
-  document.getElementById('topTitle').textContent = (prod.emoji || '') + ' ' + prod.name;
+  // Hiện ảnh hoặc emoji trong header modal
+  const thumbEl = document.getElementById('topThumb');
+  if (prod.image) {
+    thumbEl.innerHTML = `<img src="${prod.image}" style="width:100%;height:100%;object-fit:cover">`;
+  } else {
+    thumbEl.innerHTML = prod.emoji || '🍱';
+  }
+  document.getElementById('topTitle').textContent = prod.name;
 
   // Reset size buttons
   document.querySelectorAll('.size-btn').forEach((b,i) => b.classList.toggle('sel', i===0));
