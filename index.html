@@ -83,8 +83,11 @@ html,body{font-family:'Nunito','Segoe UI',sans-serif;color:var(--ink);background
 }
 .product-card:hover{transform:translateY(-2px);box-shadow:0 5px 0 var(--brand);border-color:var(--brand)}
 .product-card:active{transform:translateY(0)}
-.product-card.out{opacity:.45;pointer-events:none}
-.product-card.out::after{content:'Hết';position:absolute;top:.5rem;right:.5rem;background:var(--red);color:#fff;font-size:10px;font-weight:800;padding:.15rem .5rem;border-radius:8px}
+.product-card.out{opacity:.5;cursor:default}
+.product-card.out:hover{transform:none;box-shadow:0 2px 0 var(--rule);border-color:var(--rule)}
+/* Badge "Hết" chỉ dùng cho món thường (không phải topping) */
+.product-card.out:not(.topping-item)::after{content:'Tạm hết';position:absolute;top:.5rem;right:.5rem;background:var(--red);color:#fff;font-size:10px;font-weight:800;padding:.15rem .5rem;border-radius:8px}
+.prod-price-out{color:var(--muted)!important;text-decoration:line-through}
 .prod-thumb{width:64px;height:64px;border-radius:10px;object-fit:cover;flex-shrink:0}
 .prod-emoji{font-size:34px;width:64px;height:64px;display:flex;align-items:center;justify-content:center;flex-shrink:0;background:var(--bg);border-radius:10px}
 .prod-info{flex:1;min-width:0;display:flex;flex-direction:column;gap:.2rem}
@@ -168,6 +171,8 @@ html,body{font-family:'Nunito','Segoe UI',sans-serif;color:var(--ink);background
 .top-card:hover{border-color:var(--yellow);background:#FFFEF0}
 .top-card.sel{border-color:var(--yellow);background:#FFFADD;color:var(--ink)}
 .top-card.sel::after{content:'✓';margin-left:auto;color:#B8900A;font-weight:800}
+.top-card.top-card-out{opacity:.45;cursor:default;background:#f9f9f9;border-color:var(--rule)}
+.top-card.top-card-out:hover{border-color:var(--rule);background:#f9f9f9;color:var(--soft)}
 .top-card-price{font-size:11.5px;font-weight:600;color:var(--muted);margin-left:auto}
 .note-input{
   width:100%;padding:.65rem .9rem;border-radius:var(--radius-sm);
@@ -491,6 +496,8 @@ const db = firebase.firestore();
 // ════════════════════════════════════════
 let products = [];
 let semiFinished = [];
+let ingredients = [];
+let recipes = {};
 let promos = [];
 let bankSettings = { bank:'', acct:'', name:'' };
 
@@ -525,6 +532,12 @@ async function initData() {
     // Load semiFinished (toppings)
     const sSnap = await db.collection('config').doc('semiFinished').get();
     if (sSnap.exists && sSnap.data().data) semiFinished = sSnap.data().data;
+
+    // Load ingredients & recipes (để tính tồn kho giống web quản lý)
+    const ingrSnap = await db.collection('config').doc('ingredients').get();
+    if (ingrSnap.exists && ingrSnap.data().data) ingredients = ingrSnap.data().data;
+    const recipeSnap = await db.collection('config').doc('recipes').get();
+    if (recipeSnap.exists && recipeSnap.data().data) recipes = recipeSnap.data().data;
 
     // Load promos
     const promoSnap = await db.collection('config').doc('promos').get();
@@ -563,6 +576,12 @@ function startSync() {
   db.collection('config').doc('semiFinished').onSnapshot(snap => {
     if (snap.exists && snap.data().data) { semiFinished = snap.data().data; renderCatTabs(); renderProducts(); }
   });
+  db.collection('config').doc('ingredients').onSnapshot(snap => {
+    if (snap.exists && snap.data().data) { ingredients = snap.data().data; renderProducts(); }
+  });
+  db.collection('config').doc('recipes').onSnapshot(snap => {
+    if (snap.exists && snap.data().data) { recipes = snap.data().data; renderProducts(); }
+  });
   db.collection('config').doc('promos').onSnapshot(snap => {
     if (snap.exists && snap.data().data) promos = snap.data().data;
   });
@@ -582,8 +601,31 @@ function fmt(n) {
 }
 function fmtFull(n) { return (n||0).toLocaleString('vi-VN') + 'đ'; }
 
+// Tính tồn kho — copy logic từ web quản lý
+function calcStock(productId) {
+  const recipe = recipes[productId];
+  if (!recipe || recipe.length === 0) return 999; // không có công thức = không giới hạn
+  let min = Infinity;
+  for (const line of recipe) {
+    const sid = line.ingrId;
+    let stock = null;
+    if (typeof sid === 'string' && sid.startsWith('s')) {
+      const s = semiFinished.find(i => i.id === parseInt(sid.slice(1)));
+      stock = s ? s.qty : null;
+    } else {
+      const rid = typeof sid === 'string' && sid.startsWith('r') ? parseInt(sid.slice(1)) : parseInt(sid);
+      const ingr = ingredients.find(i => i.id === rid);
+      stock = ingr ? ingr.qty : null;
+    }
+    if (stock === null) continue;
+    const canMake = Math.floor(stock / line.qty);
+    if (canMake < min) min = canMake;
+  }
+  return min === Infinity ? 999 : min;
+}
+
 function getToppings() {
-  return semiFinished.filter(s => s.isTopping && s.qty > 0).map(s => ({
+  return semiFinished.filter(s => s.isTopping).map(s => ({
     id: 'semi_' + s.id,
     name: s.name,
     emoji: s.toppingEmoji || '🧋',
@@ -649,17 +691,24 @@ function renderProducts() {
   }
 
   const productCards = filtered.map(p => {
+    const avail = calcStock(p.id);
+    const isOut = avail === 0;
+    const hasRecipe = recipes[p.id] && recipes[p.id].length > 0;
+    const stockLabel = isOut ? 'Tạm hết'
+      : avail >= 999 ? (hasRecipe ? '' : 'Còn hàng')
+      : `Còn ${avail} ly`;
     const thumb = p.image
       ? `<img src="${p.image}" class="prod-thumb">`
       : `<div class="prod-emoji">${p.emoji || '🍱'}</div>`;
     return `
-    <div class="product-card" onclick="openTopping(${p.id})">
+    <div class="product-card${isOut?' out':''}" onclick="${isOut?'':('openTopping('+p.id+')')}">
       ${thumb}
       <div class="prod-info">
         <div class="prod-name">${p.name}</div>
         <div class="prod-price">${fmt(p.price)}</div>
+        ${stockLabel ? `<div class="prod-desc">${stockLabel}</div>` : ''}
       </div>
-      <div class="prod-add-btn">+</div>
+      ${isOut ? '' : '<div class="prod-add-btn">+</div>'}
     </div>`;
   }).join('');
 
@@ -667,14 +716,15 @@ function renderProducts() {
     const semi = semiFinished.find(s => 'semi_' + s.id === t.id);
     const isOut = semi && semi.qty <= 0;
     return `
-    <div class="product-card ${isOut?'out':''}" onclick="addToppingDirectly('${t.id}')">
-      <div style="position:absolute;top:.4rem;right:3.2rem;background:#FFF6CC;border:1px solid var(--yellow);color:#B8900A;font-size:10px;font-weight:800;padding:.1rem .45rem;border-radius:8px">Topping</div>
+    <div class="product-card topping-item${isOut?' out':''}\" onclick="${isOut?'':('addToppingDirectly(\''+t.id+'\')')}">
+      <div style="position:absolute;top:.4rem;left:.5rem;background:#FFF6CC;border:1px solid var(--yellow);color:#B8900A;font-size:10px;font-weight:800;padding:.1rem .45rem;border-radius:8px">Topping</div>
+      ${isOut ? '<div style="position:absolute;top:.4rem;right:.5rem;background:#EF4350;color:#fff;font-size:10px;font-weight:800;padding:.1rem .45rem;border-radius:8px">Tạm hết</div>' : ''}
       <div class="prod-emoji">${t.emoji}</div>
       <div class="prod-info">
         <div class="prod-name">${t.name}</div>
-        <div class="prod-price">+${fmt(t.price)}</div>
+        <div class="prod-price${isOut?' prod-price-out':''}">+${fmt(t.price)}</div>
       </div>
-      <div class="prod-add-btn">+</div>
+      ${isOut ? '' : '<div class="prod-add-btn">+</div>'}
     </div>`;
   }).join('');
 
@@ -708,11 +758,17 @@ function openTopping(id) {
   const grid = document.getElementById('topGrid');
   const empty = document.getElementById('topEmpty');
   if (tops.length) {
-    grid.innerHTML = tops.map(t => `
-      <div class="top-card" id="tc_${t.id}" onclick="toggleTopping('${t.id}')">
+    grid.innerHTML = tops.map(t => {
+      const semi = semiFinished.find(s => 'semi_' + s.id === t.id);
+      const tOut = semi && semi.qty <= 0;
+      return `
+      <div class="top-card${tOut?' top-card-out':''}" id="tc_${t.id}" onclick="${tOut?'':('toggleTopping(\''+t.id+'\')')}">
         <span>${t.emoji}</span><span>${t.name}</span>
-        <span class="top-card-price">+${(t.price/1000).toFixed(0)}k</span>
-      </div>`).join('');
+        ${tOut
+          ? '<span class="top-card-price" style="color:var(--red)">Tạm hết</span>'
+          : `<span class="top-card-price">+${(t.price/1000).toFixed(0)}k</span>`}
+      </div>`;
+    }).join('');
     empty.style.display = 'none';
   } else {
     grid.innerHTML = '';
